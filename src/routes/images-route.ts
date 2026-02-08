@@ -94,5 +94,32 @@ imagesRoute.get("/metadata", async (c) => {
   return c.json({ images });
 });
 
+// download image by id
+imagesRoute.get("/:id/download", async (c) => {
+  const { id } = c.req.param();
+  if (!id) {
+    return c.json({ message: "No id provided" }, 400);
+  }
+  const image = await db
+    .select()
+    .from(imagesTable)
+    .where(eq(imagesTable.id, Number(id)));
+
+  // set content type appropriately
+  if (!image || image.length === 0) {
+    return c.json({ message: "Image not found" }, 404);
+  }
+  // Convert Uint8Array to ArrayBuffer for proper response
+  const imgData = image[0].image as Uint8Array;
+  const arrayBuffer = imgData.buffer.slice(
+    imgData.byteOffset,
+    imgData.byteOffset + imgData.byteLength,
+  ) as ArrayBuffer;
+  return c.body(arrayBuffer, {
+    headers: { "Content-Type": image[0].type },
+    status: 200,
+  });
+});
+
 // export users route
 export default imagesRoute;
