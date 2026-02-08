@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import { imagesTable } from "../db/schema.js";
+import { db } from "../db/index.js";
+import { eq, getTableColumns } from "drizzle-orm";
 
 // create images route
 const imagesRoute = new Hono();
@@ -23,7 +26,21 @@ imagesRoute.post("/", async (c) => {
     fileArray.map(async (file) => {
       // load into a buffer for later use
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      // insert into database
+      const imageResult = await db.insert(imagesTable).values({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        image: buffer,
+      });
+
+      if (!imageResult || !imageResult.changes) {
+        return c.json({ message: "Failed to insert image into database" }, 500);
+      }
+
       return {
+        id: imageResult.lastInsertRowid,
         name: file.name,
         type: file.type,
         size: file.size,
@@ -36,6 +53,45 @@ imagesRoute.post("/", async (c) => {
     message: "Hello from images file route!",
     files: processedImages,
   });
+});
+
+// get image metadata by id
+imagesRoute.get("/:id/metadata", async (c) => {
+  const { id } = c.req.param();
+  if (!id) {
+    return c.json({ message: "No id provided" }, 400);
+  }
+  const image = await db
+    .select()
+    .from(imagesTable)
+    .where(eq(imagesTable.id, Number(id)));
+  return c.json({
+    image: {
+      id: image[0].id,
+      name: image[0].name,
+      type: image[0].type,
+      size: image[0].size,
+    },
+  });
+});
+
+//delete image by id
+imagesRoute.delete("/:id", async (c) => {
+  const { id } = c.req.param();
+  if (!id) {
+    return c.json({ message: "No id provided" }, 400);
+  }
+  const image = await db
+    .delete(imagesTable)
+    .where(eq(imagesTable.id, Number(id)));
+  return c.json({ message: "Image deleted", image });
+});
+
+// get all image metadata
+imagesRoute.get("/metadata", async (c) => {
+  const { id, name, type, size } = getTableColumns(imagesTable);
+  const images = await db.select({ id, name, type, size }).from(imagesTable);
+  return c.json({ images });
 });
 
 // export users route
